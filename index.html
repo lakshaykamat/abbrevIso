@@ -1,200 +1,318 @@
 <!DOCTYPE html>
+<html lang="en">
 <head>
-  <meta charset = 'utf-8'>
-  <title>LTWA search</title>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f5f6f2">
+  <meta name="description" content="Create clear ISO 4 abbreviations for journal and publication titles.">
+  <title>Journal Title Abbreviator</title>
   <script
-    src='https://code.jquery.com/jquery-3.2.1.min.js'
-    integrity='sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4='
-    crossorigin='anonymous'></script>
-  <script src='browserBundle.js'></script>
+    src="https://code.jquery.com/jquery-3.2.1.min.js"
+    integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4="
+    crossorigin="anonymous"></script>
+  <script src="browserBundle.js"></script>
 
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #242725;
+      --muted: #707671;
+      --line: #e3e5e3;
+      --accent: #315e4a;
+    }
 
-<script>
-'use strict';
-/** @type {AbbrevIso.AbbrevIso} */
-let abbrevIso;
+    * { box-sizing: border-box; }
 
-/**
- * Returns a wrapping function: as long as it continues to be invoked,
- * `f` will not be triggered. It will be called after it stops being called
- * for `wait` milliseconds.
- * @param {function} f
- * @param {*} wait - number of milliseconds required without another call
- * @return {function}
- */
-function debounce(f, wait) {
-  let timeout;
-  return function() {
-    const context = this; /* eslint-disable-line no-invalid-this */
-    const args = arguments; /* eslint-disable-line prefer-rest-params */
-    const later = function() {
-      timeout = null;
-      f.apply(context, args);
-    };
-    clearTimeout(timeout);
-    timeout = setTimeout(later, wait);
-  };
-};
+    body {
+      min-width: 320px;
+      min-height: 100vh;
+      margin: 0;
+      padding: 58px 24px;
+      background: #fff;
+      color: var(--ink);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
 
-/**
- * Processes the string given by the user in the form input and show results.
- */
-function onInputChange() {
-  const value = $('#inputText')[0].value;
-  // Ignore short values.
-  if (value.trim().length < 4) {
-    $('#info2').html(''); // Clear the 'searching...'.
-    return;
-  }
-  const result = abbrevIso.makeAbbreviation(value);
-  $('#resultString').text(result);
-  // Find and list all matching patterns (without excluding overlaps).
-  const matchingPatterns = abbrevIso.getMatchingPatterns(value);
-  const weakPatterns = abbrevIso.getMatchingPatterns(value, ['*'], true);
-  const header = '<th>Words</th><th>Abbr.</th><th><a ' +
-    'href="https://www.loc.gov/standards/iso639-2/php/code_list.php">' +
-    'Languages</a></th>';
-  $('#matchingPatterns').html(header);
-  $('#weakPatterns').html(header);
-  for (const pattern of weakPatterns) {
-    const row = document.createElement('tr');
-    row.innerHTML = '<td>' + pattern.pattern + '</td><td>' +
-      pattern.replacement + '</td><td>' +
-      pattern.languages.sort().join(',') + '</td>';
-    if (matchingPatterns.includes(pattern))
-      $('#matchingPatterns').append(row);
-    else
-      $('#weakPatterns').append(row);
-  }
-  $('#info2').html(''); // Clear the 'searching...'.
-};
+    main {
+      width: min(100%, 640px);
+      margin: 0 auto;
+    }
 
+    h1 {
+      margin: 0;
+      font-size: 30px;
+      font-weight: 600;
+      letter-spacing: -0.035em;
+    }
 
-$(document).ready(function() {
-  // Handle API: read parameters from GET into the HTML form.
-  let r = new RegExp('[\?&]search=([^&#]*)', 'i').exec(window.location.href);
-  if (r && r[1])
-    $('#inputText').val(decodeURIComponent(r[1]).replace(/_/g, ' '));
+    .intro {
+      margin: 9px 0 34px;
+      color: var(--muted);
+      font-size: 15px;
+    }
 
-  // Load the LTWA table, short words list, and tests.
-  const ltwaAjax = $.ajax({
-    mimeType: 'text/plain; charset=utf-8',
-    url: 'LTWA_2024-modified.csv',
-    dataType: 'text',
-  });
-  const shortWordsAjax = $.ajax({
-    mimeType: 'text/plain; charset=utf-8',
-    url: 'shortwords.txt',
-    dataType: 'text',
-  });
+    .panel-heading {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 10px;
+    }
 
-  $.when(ltwaAjax, shortWordsAjax).done(
-      (ltwa, shortWords) => {
-        ltwa = ltwa[0];
-        shortWords = shortWords[0];
-        abbrevIso = new AbbrevIso.AbbrevIso(ltwa, shortWords);
-        $('#info').html('Loaded ' + abbrevIso.size + ' rows.');
+    label, .section-title {
+      margin: 0;
+      font-size: 14px;
+      font-weight: 600;
+    }
 
-        // We're ready to parse, so enable the interface and doTheMatching();
-        $('#inputText').on('input',
-            debounce(() => {
-              // The zero timeout allows the browser to refresh the GUI
-              // and draw '(searching...)'.
-              $('#info2').html('(searching...)');
-              setTimeout(onInputChange, 0);
-            }, 300)
-        );
-        $('#info2').html('(searching...)');
-        setTimeout(onInputChange, 0);
+    textarea {
+      display: block;
+      width: 100%;
+      min-height: 104px;
+      padding: 13px 14px;
+      resize: vertical;
+      border: 1px solid #d4d8d5;
+      border-radius: 6px;
+      background: #fff;
+      color: var(--ink);
+      font: inherit;
+      font-size: 15px;
+      line-height: 1.5;
+      transition: border-color 120ms ease, box-shadow 120ms ease;
+    }
+
+    textarea:focus {
+      border-color: var(--accent);
+      outline: 2px solid rgba(49, 94, 74, 0.12);
+    }
+
+    .status {
+      min-height: 16px;
+      margin: 8px 0 0;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .status:empty { display: none; }
+
+    .output-section { margin-top: 32px; }
+
+    .outputs { border-top: 1px solid var(--line); }
+
+    .output-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+      min-height: 84px;
+      padding: 14px 0;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .output-copy { min-width: 0; }
+
+    .output-label {
+      margin: 0 0 5px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 500;
+    }
+
+    .output-value {
+      margin: 0;
+      overflow-wrap: anywhere;
+      color: var(--ink);
+      font-size: 17px;
+      font-weight: 500;
+      line-height: 1.5;
+    }
+
+    .output-value:empty::before {
+      color: #a0a5a1;
+      content: "—";
+    }
+
+    .copy-button {
+      flex: 0 0 auto;
+      min-width: 68px;
+      padding: 7px 10px;
+      border: 1px solid #d8dcd9;
+      border-radius: 5px;
+      background: #fff;
+      color: #454b47;
+      font: inherit;
+      font-size: 12px;
+      cursor: pointer;
+    }
+
+    .copy-button:hover:not(:disabled) {
+      border-color: #9ca69f;
+      background: #f8f9f8;
+    }
+
+    .copy-button:focus-visible {
+      outline: 2px solid rgba(49, 94, 74, 0.35);
+      outline-offset: 2px;
+    }
+
+    .copy-button:disabled {
+      color: #a0a5a1;
+      cursor: default;
+    }
+
+    @media (max-width: 520px) {
+      body { padding: 38px 18px; }
+      h1 { font-size: 27px; }
+      .output-row { gap: 12px; }
+    }
+  </style>
+
+  <script>
+    'use strict';
+    /** @type {AbbrevIso.AbbrevIso} */
+    let abbrevIso;
+
+    function debounce(f, wait) {
+      let timeout;
+      return function() {
+        const context = this; /* eslint-disable-line no-invalid-this */
+        const args = arguments; /* eslint-disable-line prefer-rest-params */
+        clearTimeout(timeout);
+        timeout = setTimeout(() => f.apply(context, args), wait);
+      };
+    }
+
+    function onInputChange() {
+      const value = $('#inputText').val();
+      if (value.trim().length < 4) {
+        $('#resultString, #resultNoDots').text('');
+        $('.copy-button').prop('disabled', true).text('Copy');
+        return;
       }
-  );
-});
-</script>
 
-<script async defer data-domain="marcinwrochna.github.io" src="https://plausible.blekot.pl/js/plozible.js"></script>
+      const result = abbrevIso.makeAbbreviation(value);
+      $('#resultString').text(result);
+      $('#resultNoDots').text(result.replace(/\./g, ''));
+      $('.copy-button').prop('disabled', false).text('Copy');
+    }
 
-<style>
-  #container { max-width: 620px; margin: auto; }
-  table {
-    border: none;
-    border-collapse: collapse;
-  }
-  td, th {
-    border-left: 1px solid gray;
-    border-right: 1px solid gray;
-    padding: 5px;
-  }
-  td:nth-child(1) { min-width: 9em; }
-  td:nth-child(2) { min-width: 9em; }
-  td:nth-child(3) { min-width: 2em; }
-  tr:nth-child(even) {
-    background-color: #ddeeee;
-  }
-  #info {
-    font-size: 0.9em;
-  }
-  input[type=text] {
-    min-width: 32em;
-    margin-top: 5px;
-    margin-bottom: 5px;
-  }
-  h1 {
-    font-size: 1.2em;
-    margin-bottom: 10px;
-  }
-  p { margin: 0; }
-  ul { margin: 0.5em; }
-  #resultString { display: block; margin: 0.9em; font-style: italic; }
-  a { color: #337; text-decoration: none; }
-</style>
+    async function copyText(value) {
+      if (navigator.clipboard && window.isSecureContext) {
+        try {
+          await navigator.clipboard.writeText(value);
+          return;
+        } catch (error) {
+          // Try the local fallback if clipboard permissions are unavailable.
+        }
+      }
+
+      const copyField = document.createElement('textarea');
+      copyField.value = value;
+      copyField.setAttribute('readonly', '');
+      copyField.style.position = 'fixed';
+      copyField.style.left = '-9999px';
+      document.body.appendChild(copyField);
+      copyField.select();
+      const copied = document.execCommand('copy');
+      copyField.remove();
+      if (!copied) throw new Error('Copy failed');
+    }
+
+    async function copyOutput(button) {
+      const output = document.getElementById(button.dataset.target);
+      const originalLabel = button.textContent;
+      const originalAccessibleLabel = button.getAttribute('aria-label');
+      try {
+        await copyText(output.textContent);
+        button.textContent = 'Copied';
+        button.setAttribute('aria-label', 'Copied to clipboard');
+        window.setTimeout(() => {
+          button.textContent = originalLabel;
+          button.setAttribute('aria-label', originalAccessibleLabel);
+        }, 1200);
+      } catch (error) {
+        button.textContent = 'Failed';
+        button.setAttribute('aria-label', 'Copy failed, try again');
+        window.setTimeout(() => {
+          button.textContent = originalLabel;
+          button.setAttribute('aria-label', originalAccessibleLabel);
+        }, 1600);
+      }
+    }
+
+    $(document).ready(function() {
+      const search = new URLSearchParams(window.location.search).get('search');
+      if (search)
+        $('#inputText').val(search.replace(/_/g, ' '));
+
+      const ltwaAjax = $.ajax({
+        mimeType: 'text/plain; charset=utf-8',
+        url: 'LTWA_2024-modified.csv',
+        dataType: 'text',
+      });
+      const shortWordsAjax = $.ajax({
+        mimeType: 'text/plain; charset=utf-8',
+        url: 'shortwords.txt',
+        dataType: 'text',
+      });
+      $('#status').text('Loading abbreviation data…');
+
+      $('#inputText').on('input', debounce(function() {
+        if (!abbrevIso) return;
+        onInputChange();
+      }, 180));
+
+      $.when(ltwaAjax, shortWordsAjax).done((ltwa, shortWords) => {
+        abbrevIso = new AbbrevIso.AbbrevIso(ltwa[0], shortWords[0]);
+        onInputChange();
+        $('#status').text('');
+      }).fail(() => {
+        $('#status').text('Could not load the abbreviation data. Refresh the page to try again.');
+      });
+    });
+  </script>
 </head>
 <body>
-<div id='container'>
-<form action='javascript:void(0);'>
-  <h1>List of Title Word Abbreviations</h1>
-  <br/>
-  <span id='info'>Loading...</span>
-  <span id='info2'></span>
-  <br/>
-  <input id='inputText' type='text' value='International Journal of Geographical Information Science' /><br/>
-  <table id='matchingPatterns' class='patterns'></table>
-  <br/>
-  Probably standard ISO-4 abbreviation:<br/>
-  <span id='resultString'></span><br/>
-  Unused patterns that could match as compound words:
-  <table id='weakPatterns' class='patterns'></table>
-  <br/>
-  <p>Some caveats:
-    <ul>
-      <li>Sometimes the LTWA only includes an entry that should be inflected (if
-        <i>equilibria</i> is not abbreviated, check <i>equilibrium</i>).</li>
-      <li>Look for compounds words (if <i>bioengineering</i> is not abbreviated,
-        check if <i>engineering</i> appears on the list of possible compounds).</li>
-      <li>Names of persons should not be abbreviated, even if they match.</li>
-      <li>Every rule applies to every language (not only those listed). However,
-        if two rules contradict, check the <i>languages</i> column to see which meaning
-        was intended (e.g. <i>Real sociedad</i> vs <i>Real number</i>).
-      </li>
-    </ul>
-  </p>
-  <br/>
-  <p>See the <a href='https://web.archive.org/web/20180328190032/http://www.uai.cl/images/sitio/biblioteca/citas/ISO_4_1997en.pdf/'>ISO-4</a> for general rules, e.g.:
-    <ul>
-      <li>articles, conjunctions and prepositions are omitted (except prepositions at the beginning, like <i>From zero to hero</i>, or locutions like <i>in vivo</i>);</li>
-      <li>commas are removed, periods are replaced by commas, other punctuation is preserved;</li>
-      <li>capitalization is not specified;</li>
-      <li>diacritics are left as in the original title;</li>
-      <li>words like <i>Part</i>, <i>Series</i>, <i>Section</i> should be omitted;</li>
-      <li>single word titles (possibly with an article or preposition) are not abbreviated;</li>
-      <li><i>n.a.</i> or <i>–</i> means not abbreviated.</li>
-    </ul>
-  </p>
-  <br/>
-  <p>Based on the 2024 version of the <a href='http://www.issn.org/services/online-services/access-to-the-ltwa/'>LTWA</a> (latest as of 2025-06-29).</p>
-  <p><small>Report issues at <a href='https://github.com/marcinwrochna/abbrevIso'>GitHub</a></small></p>
-</form>
-</div>
+  <main>
+    <header>
+      <h1>Journal title abbreviator</h1>
+      <p class="intro">ISO 4 abbreviations for journal and publication titles.</p>
+    </header>
+
+    <section aria-labelledby="inputHeading">
+      <div class="panel-heading">
+        <label id="inputHeading" for="inputText">Publication title</label>
+      </div>
+      <textarea id="inputText" spellcheck="false" aria-describedby="status">International Journal of Geographical Information Science</textarea>
+      <p id="status" class="status" role="status" aria-live="polite"></p>
+    </section>
+
+    <section class="output-section" aria-labelledby="outputHeading">
+      <div class="panel-heading">
+        <h2 class="section-title" id="outputHeading">Abbreviation</h2>
+      </div>
+      <div class="outputs" aria-live="polite">
+        <div class="output-row">
+          <div class="output-copy">
+            <p class="output-label">With periods</p>
+            <p id="resultString" class="output-value"></p>
+          </div>
+          <button class="copy-button" type="button" data-target="resultString" aria-label="Copy abbreviation with periods" disabled>Copy</button>
+        </div>
+        <div class="output-row">
+          <div class="output-copy">
+            <p class="output-label">Without periods</p>
+            <p id="resultNoDots" class="output-value"></p>
+          </div>
+          <button class="copy-button" type="button" data-target="resultNoDots" aria-label="Copy abbreviation without periods" disabled>Copy</button>
+        </div>
+      </div>
+    </section>
+  </main>
+  <script>
+    document.querySelectorAll('.copy-button').forEach(button => {
+      button.addEventListener('click', () => copyOutput(button));
+    });
+  </script>
 </body>
-
-
 </html>
