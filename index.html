@@ -241,9 +241,12 @@
     }
 
     $(document).ready(function() {
+      const defaultTitle = 'International Journal of Geographical Information Science';
       const search = new URLSearchParams(window.location.search).get('search');
       if (search)
         $('#inputText').val(search.replace(/_/g, ' '));
+      else
+        $('#inputText').val(defaultTitle);
 
       const ltwaAjax = $.ajax({
         mimeType: 'text/plain; charset=utf-8',
